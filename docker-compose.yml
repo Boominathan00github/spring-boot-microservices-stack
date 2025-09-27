@@ -1,0 +1,77 @@
+services:
+  eureka-server:
+    build: ./Eureka-Server
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    networks:
+      - spring-micro-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:8761/actuator/health | grep '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  config-server:
+    build: ./Config-Server
+    container_name: config-server
+    ports: 
+      - "8888:8888"
+    environment:
+      SPRING_PROFILES_ACTIVE: native
+    healthcheck:
+        test: ["CMD-SHELL", "curl -s http://localhost:8888/actuator/health | grep '\"status\":\"UP\"'"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+    networks:
+      - spring-micro-net
+
+  department-service:
+    build: ./Department-Service
+    container_name: department-service
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888/"
+      SPRING_PROFILES_ACTIVE: docker
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: 1.0
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+    ports:
+      - "8081:8081"
+    depends_on: 
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    networks: 
+      - spring-micro-net
+
+  employee-service:
+    build: ./Employee-Service
+    container_name: employee-service
+    environment: 
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888/"
+      SPRING_PROFILES_ACTIVE: docker
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: 1.0
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+    ports:
+      - "8082:8082"
+    depends_on: 
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy   
+    networks:
+      - spring-micro-net    
+
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks: 
+      - spring-micro-net
+
+networks:
+  spring-micro-net:
+    driver: bridge
